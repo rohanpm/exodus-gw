@@ -7,7 +7,7 @@ This document provides an overview of the APIs available in exodus-gw
 along with general usage information.
 
 For a full reference on the available endpoints, see:
-`API Reference <api.html>`_.
+:ref:`api-reference`.
 
 .. warning::
 

@@ -29,8 +29,10 @@ from typing import Optional
 import textwrap
 import logging
 
-import aioboto3
-from fastapi import Request, Response, Path, Query, HTTPException
+import aiobotocore
+
+# import aioboto3
+from fastapi import Request, Response, Path, Query, HTTPException, Depends
 
 from ..app import app
 
@@ -38,6 +40,15 @@ from .util import extract_mpu_parts, xml_response
 
 
 LOG = logging.getLogger("s3")
+
+session = aiobotocore.get_session()
+
+
+async def s3_client():
+    LOG.warning("CREATING s3 client")
+    async with session.create_client("s3") as client:
+        yield client
+
 
 # A partial TODO list for this API:
 # - format of 'key' should be enforced (sha256sum)
@@ -58,6 +69,7 @@ LOG = logging.getLogger("s3")
 )
 async def multipart_upload(
     request: Request,
+    s3=Depends(s3_client),
     bucket: str = Path(..., description="S3 bucket name"),
     key: str = Path(..., description="S3 object key"),
     uploadId: Optional[str] = Query(
@@ -97,11 +109,13 @@ async def multipart_upload(
 
     if uploads == "":
         # Means a new upload is requested
-        return await create_multipart_upload(bucket, key)
+        return await create_multipart_upload(s3, bucket, key)
 
     elif uploads is None and uploadId:
         # Given an existing upload to complete
-        return await complete_multipart_upload(bucket, key, uploadId, request)
+        return await complete_multipart_upload(
+            s3, bucket, key, uploadId, request
+        )
 
     # Caller did something wrong
     raise HTTPException(
@@ -119,6 +133,7 @@ async def multipart_upload(
 )
 async def upload(
     request: Request,
+    s3=Depends(s3_client),
     bucket: str = Path(..., description="S3 bucket name"),
     key: str = Path(..., description="S3 object key"),
     uploadId: Optional[str] = Query(
@@ -144,24 +159,23 @@ async def upload(
 
     if uploadId is None and partNumber is None:
         # Single-part upload
-        return await object_put(bucket, key, request)
+        return await object_put(s3, bucket, key, request)
 
     # Multipart upload
-    return await multipart_put(bucket, key, uploadId, partNumber, request)
+    return await multipart_put(s3, bucket, key, uploadId, partNumber, request)
 
 
-async def object_put(bucket: str, key: str, request: Request):
+async def object_put(s3, bucket: str, key: str, request: Request):
     # Single-part upload handler: entire object is written via one PUT.
     body = await request.body()
 
-    async with aioboto3.client("s3") as s3:
-        response = await s3.put_object(Bucket=bucket, Key=key, Body=body)
+    response = await s3.put_object(Bucket=bucket, Key=key, Body=body)
 
     return Response(headers={"ETag": response["ETag"]})
 
 
 async def complete_multipart_upload(
-    bucket: str, key: str, uploadId: str, request: Request
+    s3, bucket: str, key: str, uploadId: str, request: Request
 ):
     body = await request.body()
 
@@ -169,13 +183,12 @@ async def complete_multipart_upload(
 
     LOG.debug("completing mpu for parts %s", parts)
 
-    async with aioboto3.client("s3") as s3:
-        response = await s3.complete_multipart_upload(
-            Bucket=bucket,
-            Key=key,
-            UploadId=uploadId,
-            MultipartUpload={"Parts": parts},
-        )
+    response = await s3.complete_multipart_upload(
+        Bucket=bucket,
+        Key=key,
+        UploadId=uploadId,
+        MultipartUpload={"Parts": parts},
+    )
 
     LOG.debug("Completed mpu: %s", response)
     return xml_response(
@@ -187,9 +200,8 @@ async def complete_multipart_upload(
     )
 
 
-async def create_multipart_upload(bucket: str, key: str):
-    async with aioboto3.client("s3") as s3:
-        response = await s3.create_multipart_upload(Bucket=bucket, Key=key)
+async def create_multipart_upload(s3, bucket: str, key: str):
+    response = await s3.create_multipart_upload(Bucket=bucket, Key=key)
 
     return xml_response(
         "CreateMultipartUploadOutput",
@@ -200,18 +212,17 @@ async def create_multipart_upload(bucket: str, key: str):
 
 
 async def multipart_put(
-    bucket: str, key: str, uploadId: str, partNumber: int, request: Request
+    s3, bucket: str, key: str, uploadId: str, partNumber: int, request: Request
 ):
     body = await request.body()
 
-    async with aioboto3.client("s3") as s3:
-        response = await s3.upload_part(
-            Body=body,
-            Bucket=bucket,
-            Key=key,
-            PartNumber=partNumber,
-            UploadId=uploadId,
-        )
+    response = await s3.upload_part(
+        Body=body,
+        Bucket=bucket,
+        Key=key,
+        PartNumber=partNumber,
+        UploadId=uploadId,
+    )
 
     return Response(headers={"ETag": response["ETag"]})
 
@@ -224,6 +235,7 @@ async def multipart_put(
     response_class=Response,
 )
 async def abort_multipart_upload(
+    s3=Depends(s3_client),
     bucket: str = Path(..., description="S3 bucket name"),
     key: str = Path(..., description="S3 object key"),
     uploadId: str = Query(..., description="ID of a multipart upload"),
@@ -237,9 +249,6 @@ async def abort_multipart_upload(
     """
     LOG.debug("Abort %s", uploadId)
 
-    async with aioboto3.client("s3") as s3:
-        await s3.abort_multipart_upload(
-            Bucket=bucket, Key=key, UploadId=uploadId
-        )
+    await s3.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=uploadId)
 
     return Response()

@@ -29,6 +29,7 @@ from typing import Optional
 import textwrap
 import logging
 
+from botocore.config import Config
 import aiobotocore
 
 # import aioboto3
@@ -36,7 +37,7 @@ from fastapi import Request, Response, Path, Query, HTTPException, Depends
 
 from ..app import app
 
-from .util import extract_mpu_parts, xml_response
+from .util import extract_mpu_parts, xml_response, RequestReader
 
 
 LOG = logging.getLogger("s3")
@@ -46,7 +47,9 @@ session = aiobotocore.get_session()
 
 async def s3_client():
     LOG.warning("CREATING s3 client")
-    async with session.create_client("s3") as client:
+    async with session.create_client(
+        "s3", config=Config(retries={"max_attempts": 1})
+    ) as client:
         yield client
 
 
@@ -167,9 +170,15 @@ async def upload(
 
 async def object_put(s3, bucket: str, key: str, request: Request):
     # Single-part upload handler: entire object is written via one PUT.
-    body = await request.body()
+    reader = RequestReader(request)
 
-    response = await s3.put_object(Bucket=bucket, Key=key, Body=body)
+    response = await s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=reader,
+        ContentMD5=request.headers["Content-MD5"],
+        ContentLength=int(request.headers["Content-Length"]),
+    )
 
     return Response(headers={"ETag": response["ETag"]})
 
@@ -214,14 +223,17 @@ async def create_multipart_upload(s3, bucket: str, key: str):
 async def multipart_put(
     s3, bucket: str, key: str, uploadId: str, partNumber: int, request: Request
 ):
-    body = await request.body()
+    # body = await request.body()
+    reader = RequestReader(request)
 
     response = await s3.upload_part(
-        Body=body,
+        Body=reader,
         Bucket=bucket,
         Key=key,
         PartNumber=partNumber,
         UploadId=uploadId,
+        ContentMD5=request.headers["Content-MD5"],
+        ContentLength=int(request.headers["Content-Length"]),
     )
 
     return Response(headers={"ETag": response["ETag"]})

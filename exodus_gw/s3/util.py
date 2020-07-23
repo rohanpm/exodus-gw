@@ -60,3 +60,17 @@ def xml_response(operation: str, **kwargs) -> Response:
     xml = io.BytesIO()
     ElementTree(root).write(xml, encoding="UTF-8", xml_declaration=True)
     return Response(content=xml.getvalue(), media_type="application/xml")
+
+
+class RequestReader:
+    def __init__(self, request):
+        self._req = request
+
+    def __aiter__(self):
+        return self._req.stream().__aiter__()
+
+    def read(self, count):
+        raise NotImplementedError()
+
+    def seek(self, x):
+        assert x == 0

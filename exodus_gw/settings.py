@@ -159,6 +159,7 @@ def get_environment(env: str, settings: Settings = None):
         if env_obj.name == env:
             return env_obj
 
+    raise RuntimeError("foo")
     raise HTTPException(
         status_code=404, detail="Invalid environment=%s" % repr(env)
     )

@@ -31,6 +31,9 @@ import boto3.session
 import requests
 from botocore.exceptions import ClientError
 
+# How many items we'll add to a publish per request.
+ITEM_BATCH_SIZE = 5000
+
 # Represents a single item to be uploaded & published.
 Item = namedtuple("Item", ["src_path", "dest_path", "object_key"])
 
@@ -147,17 +150,28 @@ def publish_items(args, items):
     print("Created publish {}".format(publish))
 
     put_url = urljoin(args.exodus_gw_url, publish["links"]["self"])
-    for item in items:
+    total = 0
+    while items:
+        batch = items[0:ITEM_BATCH_SIZE]
+        items = items[ITEM_BATCH_SIZE:]
+
         r = session.put(
             put_url,
-            json={
-                "web_uri": item.dest_path,
-                "object_key": item.object_key,
-                "from_date": "abc123",
-            },
+            json=[
+                {
+                    "web_uri": item.dest_path,
+                    "object_key": item.object_key,
+                    "from_date": "abc123",
+                }
+                for item in batch
+            ],
         )
         r.raise_for_status()
-        print("Added to publish: {}".format(item))
+
+        total += len(batch)
+        print(
+            "Publish item count:", total, "(...in progress)" if items else ""
+        )
 
     commit_url = urljoin(args.exodus_gw_url, publish["links"]["commit"])
 

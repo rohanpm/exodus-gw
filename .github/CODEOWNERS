@@ -1,1 +1,5 @@
 *   @rohanpm @nathanegillett @crungehottman
+
+# requirements files are managed by actions.
+/requirements.txt  @github-actions @rohanpm @nathanegillett @crungehottman
+/test-requirements.txt  @github-actions @rohanpm @nathanegillett @crungehottman

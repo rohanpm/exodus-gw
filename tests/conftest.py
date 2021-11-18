@@ -9,29 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm.session import Session
 
-from exodus_gw import auth, database, main, models, schemas, settings  # noqa
+from exodus_gw import database, main, models, settings  # noqa
 
 from .async_utils import BlockDetector
-
-BASE_QUERY_RESPONSE = {
-    "ConsumedCapacity": {
-        "CapacityUnits": 1,
-        "GlobalSecondaryIndexes": {},
-        "LocalSecondaryIndexes": {},
-        "ReadCapacityUnits": 0,
-        "Table": {
-            "CapacityUnits": 0,
-            "ReadCapacityUnits": 0,
-            "WriteCapacityUnits": 0,
-        },
-        "TableName": "my-table",
-        "WriteCapacityUnits": 0,
-    },
-    "Count": 0,
-    "Items": [],
-    "LastEvaluatedKey": {},
-    "ScannedCount": 0,
-}
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +29,25 @@ def mock_aws_client():
 def mock_boto3_client():
     with mock.patch("boto3.session.Session") as mock_session:
         client = mock.MagicMock()
-        client.query.return_value = BASE_QUERY_RESPONSE
+        client.query.return_value = {
+            "ConsumedCapacity": {
+                "CapacityUnits": 0,
+                "GlobalSecondaryIndexes": {},
+                "LocalSecondaryIndexes": {},
+                "ReadCapacityUnits": 0,
+                "Table": {
+                    "CapacityUnits": 0,
+                    "ReadCapacityUnits": 0,
+                    "WriteCapacityUnits": 0,
+                },
+                "TableName": "my-table",
+                "WriteCapacityUnits": 0,
+            },
+            "Count": 0,
+            "Items": [],
+            "LastEvaluatedKey": {},
+            "ScannedCount": 0,
+        }
         client.__enter__.return_value = client
         mock_session().client.return_value = client
         yield client
@@ -182,3 +180,32 @@ def auth_header():
         return {"X-RhApiPlatform-CallContext": b64_context.decode("utf-8")}
 
     return _auth_header
+
+
+@pytest.fixture
+def fake_config():
+    return {
+        "listing": {
+            "/content/dist/rhel/server": {
+                "values": ["8"],
+                "var": "releasever",
+            },
+            "/content/dist/rhel/server/8": {
+                "values": ["x86_64"],
+                "var": "basearch",
+            },
+        },
+        "origin_alias": [
+            {"src": "/content/origin", "dest": "/origin"},
+            {"src": "/origin/rpm", "dest": "/origin/rpms"},
+        ],
+        "releasever_alias": [
+            {
+                "dest": "/content/dist/rhel8/8.5",
+                "src": "/content/dist/rhel8/8",
+            },
+        ],
+        "rhui_alias": [
+            {"dest": "/content/dist/rhel8", "src": "/content/dist/rhel8/rhui"},
+        ],
+    }

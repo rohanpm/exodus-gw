@@ -16,11 +16,10 @@ def _task():
     )
 
 
-@mock.patch("exodus_gw.worker.deploy.complete_deploy_config_task")
 @mock.patch("exodus_gw.worker.deploy.CurrentMessage.get_current_message")
 @mock.patch("exodus_gw.worker.deploy.batch_write")
 def test_deploy_config(
-    mock_batch_write, mock_get_message, mock_comp_task, db, fake_config, caplog
+    mock_batch_write, mock_get_message, db, fake_config, caplog
 ):
     caplog.set_level(logging.INFO, logger="exodus-gw")
 
@@ -62,10 +61,20 @@ def test_deploy_config(
     # It should've called batch_write with the expected request.
     mock_batch_write.assert_called_with(mock.ANY, request)
 
-    # It should've sent task id to complete_deploy_config_task.
-    mock_comp_task.assert_has_calls(
-        calls=[mock.call.send_with_options(task_id=t.id, delay=120000)],
-    )
+    # It should've sent task id to complete_deploy_config_task:
+    messages = db.query(models.DramatiqMessage).all()
+    # A single message
+    assert len(messages) == 1
+
+    msg = messages[0]
+    body = msg.body
+
+    # With this actor & kwargs
+    assert msg.actor == "complete_deploy_config_task"
+    assert body["kwargs"]["task_id"] == str(t.id)
+
+    # And it should have been delayed by this long
+    assert (body["options"]["eta"] - body["message_timestamp"]) == 120000
 
 
 @mock.patch("exodus_gw.worker.deploy.CurrentMessage.get_current_message")

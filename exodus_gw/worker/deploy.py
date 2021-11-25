@@ -76,4 +76,6 @@ def deploy_config(config: Dict[str, Any], env: str, from_date: str):
     # TTL must be sent in milliseconds but the setting is in minutes for
     # convenience and consistency with other components.
     ttl = settings.config_cache_ttl * 60000
-    complete_deploy_config_task.send_with_options(task_id=task.id, delay=ttl)
+    complete_deploy_config_task.send_with_options(
+        kwargs=dict(task_id=str(task.id)), delay=ttl
+    )

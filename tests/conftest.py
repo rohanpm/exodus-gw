@@ -4,12 +4,14 @@ import os
 import uuid
 from typing import List
 
+import dramatiq
 import mock
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm.session import Session
 
 from exodus_gw import database, main, models, settings  # noqa
+from exodus_gw.dramatiq import Broker
 
 from .async_utils import BlockDetector
 
@@ -90,6 +92,41 @@ def sqlite_in_tests(monkeypatch):
         "EXODUS_GW_DB_URL", "sqlite:///%s?check_same_thread=false" % filename
     )
     yield
+
+
+@pytest.fixture(autouse=True)
+def sqlite_broker_in_tests(sqlite_in_tests):
+    """Reset dramatiq broker to a new instance pointing at sqlite DB for duration of
+    tests.
+
+    This is required because the dramatiq design is such that a broker needs to be
+    installed at import-time, and actors declared using the decorator will be pointing
+    at that broker. Since that happens too early for us to set up our test fixtures,
+    we need to reinstall another broker pointing at our sqlite DB after we've set
+    that up.
+    """
+    old_broker = dramatiq.get_broker()
+
+    new_broker = Broker()
+    dramatiq.set_broker(new_broker)
+
+    # All actors are currently pointing at old_broker which is not using sqlite.
+    # This will break a call to .send() on those actors.
+    # Point them towards new_broker instead which will allow them to work.
+    actors = []
+    for actor in old_broker.actors.values():
+        actors.append(actor)
+        actor.broker = new_broker
+        new_broker.declare_actor(actor)
+
+    # Everything now points at the sqlite-enabled broker, so proceed with test
+    yield
+
+    # Now roll back our changes
+    for actor in actors:
+        actor.broker = old_broker
+
+    dramatiq.set_broker(old_broker)
 
 
 @pytest.fixture()

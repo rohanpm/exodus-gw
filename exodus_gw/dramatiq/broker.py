@@ -16,6 +16,7 @@ from exodus_gw.dramatiq.middleware import (
     LocalNotifyMiddleware,
     PostgresNotifyMiddleware,
     SchedulerMiddleware,
+    SettingsMiddleware,
 )
 from exodus_gw.logging import loggers_init
 from exodus_gw.models import DramatiqMessage
@@ -45,6 +46,9 @@ class Broker(dramatiq.Broker):  # pylint: disable=abstract-method
         self.add_middleware(
             SchedulerMiddleware(self.__settings, self.__db_engine)
         )
+
+        # Ensure all actors can get access to the current settings.
+        self.add_middleware(SettingsMiddleware(self.__settings))
 
         self.add_middleware(LocalNotifyMiddleware())
 

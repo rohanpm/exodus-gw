@@ -3,6 +3,7 @@ import logging
 
 from repo_autoindex import Fetcher, GeneratedIndex, autoindex
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect
 
 from ..models import Item, Publish
 

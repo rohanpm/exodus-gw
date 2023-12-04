@@ -401,9 +401,10 @@ def commit_publish(
     )
 
     LOG.info(
-        "Enqueued %s commit for '%s'",
+        "Enqueued %s commit for '%s' (task %s)",
         commit_mode_str,
         msg.kwargs["publish_id"],
+        msg.message_id,
         extra={"event": "publish", "success": True},
     )
 

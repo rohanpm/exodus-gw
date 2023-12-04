@@ -6,20 +6,34 @@ import logging.config
 from asgi_correlation_id import CorrelationIdFilter
 
 
-def loggers_init(settings):
+def loggers_init(settings, component: str):
     logging.config.dictConfig(settings.log_config)
 
     root_logger = logging.getLogger()
     if not root_logger.hasHandlers():
         root_logger.addHandler(logging.StreamHandler())
 
-    if not [h for h in root_logger.handlers if isinstance(h, GWHandler)]:
-        root_logger.addHandler(GWHandler(settings))
+    if component == "worker":
+        # Handler maintaining a file for healthchecks.
+        # Only relevant for worker component.
+        if not [h for h in root_logger.handlers if isinstance(h, GWHandler)]:
+            root_logger.addHandler(GWHandler(settings))
+
+    # Additional fields to be included in JSON logs if set on log records.
+    # Differs between components.
+    extra_json_fields = {}
+    if component == "web":
+        # The ASGI correlation ID
+        extra_json_fields["request_id"] = "correlation_id"
+    elif component == "worker":
+        # The dramatiq message ID
+        extra_json_fields["message_id"] = "message_id"
 
     for handler in root_logger.handlers:
         datefmt = settings.log_config.get("datefmt")
-        handler.setFormatter(JsonFormatter(datefmt))
-        handler.addFilter(CorrelationIdFilter())
+        handler.setFormatter(JsonFormatter(datefmt, extra_json_fields))
+        if component == "web":
+            handler.addFilter(CorrelationIdFilter())
 
 
 class GWHandler(logging.Handler):  # type: ignore
@@ -50,17 +64,17 @@ class GWHandler(logging.Handler):  # type: ignore
 
 
 class JsonFormatter(logging.Formatter):
-    def __init__(self, datefmt=None):
+    def __init__(self, datefmt=None, extra_fields=None):
         super().__init__()
         self.fmt = {
             "level": "levelname",
             "logger": "name",
             "time": "asctime",
-            "request_id": "correlation_id",
             "message": "message",
             "event": "event",
             "success": "success",
         }
+        self.fmt.update(extra_fields or {})
         self.datefmt = datefmt
 
     # Appended '_' on 'converter' because mypy doesn't approve of
@@ -100,4 +114,4 @@ class JsonFormatter(logging.Formatter):
         if record.stack_info:
             d["stack_info"] = self.formatStack(record.stack_info)
 
-        return json.dumps(d)
+        return json.dumps(d, sort_keys=True)

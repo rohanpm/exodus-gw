@@ -33,7 +33,5 @@ def test_uri_alias(input, aliases, output, caplog):
     caplog.set_level(DEBUG, logger="exodus-gw")
     assert uri_alias(input, aliases) == output
     assert (
-        f'"message": "Resolved alias:\\n\\tsrc: {input}\\n\\tdest: {output}", '
-        '"event": "publish", '
-        '"success": true' in caplog.text
+        f"Resolved alias:\\n\\tsrc: {input}\\n\\tdest: {output}" in caplog.text
     )

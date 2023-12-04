@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import mock
 import pytest
 from botocore.exceptions import EndpointConnectionError
+from freezegun import freeze_time
 
 from exodus_gw.aws import dynamodb
 from exodus_gw.settings import Settings
@@ -205,6 +206,7 @@ def test_write_batch_put_fail(mock_batch_write, fake_publish, caplog):
         assert "One or more writes were unsuccessful" in str(exc_info)
 
 
+@freeze_time("2023-04-26 14:43:13+00:00")
 @mock.patch("exodus_gw.aws.dynamodb.DynamoDB.batch_write")
 def test_write_batch_delete_fail(mock_batch_write, fake_publish, caplog):
     mock_batch_write.return_value = {
@@ -220,10 +222,21 @@ def test_write_batch_delete_fail(mock_batch_write, fake_publish, caplog):
         ddb.write_batch(fake_publish.items, delete=True)
 
     assert (
-        "\"message\": \"Unprocessed items:\\n\\t{'my-table': [{'PutRequest': {'Key': {'web_uri': {'S': '/some/path'}}}}]}\", "
-        '"event": "publish", '
-        '"success": false' in caplog.text
+        json.dumps(
+            {
+                "level": "ERROR",
+                "logger": "exodus-gw",
+                "message": "Unprocessed items:\n\t{'my-table': [{'PutRequest': {'Key': {'web_uri': {'S': '/some/path'}}}}]}",
+                "event": "publish",
+                "success": False,
+                "message_id": None,
+                "time": "2023-04-26 14:43:13.000",
+            },
+            sort_keys=True,
+        )
+        in caplog.text
     )
+
     assert "Deletion failed" in str(exc_info.value)
 
 

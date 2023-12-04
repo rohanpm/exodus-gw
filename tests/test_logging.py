@@ -14,7 +14,7 @@ def test_log_levels():
     logging.getLogger().setLevel("INFO")
     logging.getLogger("old-logger").setLevel("DEBUG")
 
-    loggers_init(load_settings())
+    loggers_init(load_settings(), "web")
 
     # Should not alter existing loggers.
     assert logging.getLogger("old-logger").level == logging.DEBUG
@@ -41,7 +41,7 @@ def test_log_handler(tmp_path):
     # done for additional control since we make assertions about it.
     settings.worker_health_filepath = f"{tmp_path}/test-last-healthy"
 
-    loggers_init(settings)
+    loggers_init(settings, "worker")
 
     # Should now have one (1) StreamHandler
     assert type(root_handlers[0]) == logging.StreamHandler
@@ -61,7 +61,7 @@ def test_json_logger_configurable_datefmt(caplog):
     settings = load_settings()
     settings.log_config["datefmt"] = "%H:%M on %A, %B %d, %Y"
 
-    loggers_init(settings)
+    loggers_init(settings, "web")
     logging.getLogger("exodus-gw").info("...")
 
     # Logged timestamp should be formatted as configured in settings,
@@ -70,6 +70,6 @@ def test_json_logger_configurable_datefmt(caplog):
 
 
 def test_json_logger_stack_info(caplog):
-    loggers_init(load_settings())
+    loggers_init(load_settings(), "web")
     logging.getLogger("exodus-gw").exception("oops", stack_info=True)
     assert '"stack_info": "Stack (most recent call last)' in caplog.text

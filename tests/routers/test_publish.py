@@ -762,7 +762,10 @@ def test_commit_publish(deadline, commit_mode, auth_header, db, caplog):
             "auth",
         ),
         (
-            f"Enqueued {expected_commit_mode} commit for '11224567-e89b-12d3-a456-426614174000'",
+            (
+                f"Enqueued {expected_commit_mode} commit for '11224567-e89b-12d3-a456-426614174000' "
+                f"(task {json_r['id']})"
+            ),
             "publish",
         ),
     ]:
@@ -776,7 +779,8 @@ def test_commit_publish(deadline, commit_mode, auth_header, db, caplog):
                     "message": message,
                     "event": event,
                     "success": True,
-                }
+                },
+                sort_keys=True,
             )
             in caplog.text
         )

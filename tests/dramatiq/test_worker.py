@@ -332,6 +332,26 @@ def test_logs_prefixed(actors, caplog):
     )
 
 
+def test_logs_message_id(actors, caplog):
+    """Log messages generated within an actor have their dramatiq
+    message_id logged."""
+
+    message = actors.log_warning.send(
+        task_id="task-abc123", value="some value"
+    )
+
+    # Ensure actor is invoked
+    assert_soon(lambda: len(actors.actor_calls) == 1)
+    assert sorted(actors.actor_calls) == ["log_warning"]
+
+    # The actor should have automatically logged a Starting
+    # message including the message ID in JSON form
+    assert (
+        '"message": "[log_warning task-abc123] Starting", '
+        f'"message_id": "{message.message_id}"'
+    ) in caplog.text
+
+
 def test_logs_prefixed_threaded(actors, caplog):
     """Log messages generated within an actor-spawned thread are prefixed
     (as long as contextvars.Context was propagated).

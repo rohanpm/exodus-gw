@@ -247,7 +247,7 @@ async def s3_queues_shutdown() -> None:
 @app.on_event("startup")
 def on_startup() -> None:
     settings_init()
-    loggers_init(app.state.settings)
+    loggers_init(app.state.settings, "web")
     db_init()
     s3_queues_init()
 

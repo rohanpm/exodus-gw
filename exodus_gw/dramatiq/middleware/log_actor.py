@@ -3,15 +3,21 @@ from contextvars import ContextVar
 from functools import wraps
 
 from dramatiq import Middleware
+from dramatiq.middleware import CurrentMessage
 
 CURRENT_PREFIX: ContextVar[str] = ContextVar("CURRENT_PREFIX")
+CURRENT_MESSAGE: ContextVar[str] = ContextVar("CURRENT_MESSAGE")
+
+LOG = logging.getLogger("exodus-gw")
 
 
 class PrefixFilter(logging.Filter):
-    # A filter which will add CURRENT_PREFIX onto each message.
+    # A filter which will add CURRENT_PREFIX and dramatiq message ID
+    # onto each message.
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = CURRENT_PREFIX.get("") + record.msg
+        record.message_id = CURRENT_MESSAGE.get(None)
         return True
 
 
@@ -45,10 +51,28 @@ class LogActorMiddleware(Middleware):
 
             prefix = f"[{prefix}] "
 
-            token = CURRENT_PREFIX.set(prefix)
+            message_id = ""
+            if message := CurrentMessage.get_current_message():
+                message_id = message.message_id
+
+            message_token = CURRENT_MESSAGE.set(message_id)
+            prefix_token = CURRENT_PREFIX.set(prefix)
             try:
-                return fn(*args, **kwargs)
+                # Ensure everything gets at least a start/complete log
+                # in case the actor internally doesn't log anything.
+                #
+                # Not needed in the case of the actor failing, because
+                # there will already be an unambiguous ERROR log generated
+                # for that.
+                #
+                # Note these get the prefix, so the actual message will
+                # be something like: "[commit abc123] Starting"
+                LOG.info("Starting")
+                out = fn(*args, **kwargs)
+                LOG.info("Completed")
+                return out
             finally:
-                CURRENT_PREFIX.reset(token)
+                CURRENT_MESSAGE.reset(message_token)
+                CURRENT_PREFIX.reset(prefix_token)
 
         return new_fn

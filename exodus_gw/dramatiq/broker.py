@@ -38,7 +38,7 @@ class Broker(dramatiq.Broker):  # pylint: disable=abstract-method
         self.__broker_id = uuid.uuid4()
         self.__queue_events = defaultdict(Event)
 
-        loggers_init(self.__settings)
+        loggers_init(self.__settings, "worker")
 
         # We have some actors using this, so it's always enabled.
         self.add_middleware(CurrentMessage())
